@@ -24,49 +24,57 @@ nem-der-analyser/
 ├── data/
 │   └── cache/              # local NEMOSIS cache (gitignored)
 ├── src/
-│   ├── data_loader.py      # NEMOSIS wrappers
-│   ├── analysis/
-│   │   ├── negative_prices.py
-│   │   ├── volatility.py
-│   │   └── curtailment.py
-│   └── utils.py
+│   ├── data_loader.py      # NEMOSIS interface — only file that uses pandas
+│   ├── models/             # custom typed dataclasses
+│   │   ├── __init__.py
+│   │   ├── price.py        # PriceRecord, PriceSeries
+│   │   ├── scada.py        # ScadaRecord, ScadaSeries
+│   │   ├── solar.py        # RooftopPVRecord, RooftopPVSeries
+│   │   └── result.py       # AnalysisResult (shared return type)
+│   └── analysis/
+│       ├── negative_prices.py
+│       ├── volatility.py
+│       └── curtailment.py
 ├── app.py                  # Streamlit entry point
 ├── notebooks/              # exploratory work, not production code
-├── PLAN.md                 # this file
-├── CONTEXT.md              # NEM/DER domain knowledge for Claude Code
+├── plan.md                 # this file
+├── context.md              # NEM/DER domain knowledge for Claude Code
 ├── README.md
-└── requirements.txt
+├── pyproject.toml          # dependency management via uv
+└── requirements.txt        # kept for Streamlit Cloud compatibility
 ```
 
 ---
 
 ## Phases
 
-### Phase 1 — Data Foundation (Week 1–2) [ ]
+### Phase 1 — Data Foundation (Week 1–2) [x]
 
 **Goal:** Get NEMOSIS pulling clean data reliably. Everything else depends on this.
 
 Tasks:
-- [ ] Install NEMOSIS and dependencies
-- [ ] Pull `DISPATCHPRICE` table for SA for a 3-month test window
-- [ ] Pull `DISPATCH_UNIT_SCADA` table for SA for the same window
-- [ ] Explore raw data in a notebook — understand shape, gaps, quirks
-- [ ] Build `src/data_loader.py` — a clean module that wraps NEMOSIS and returns
-      tidy pandas DataFrames cached locally in Parquet format
+- [x] Install NEMOSIS and dependencies (uv, pyproject.toml)
+- [x] Pull `DISPATCHPRICE` table for SA — validated in notebook
+- [x] Pull `ROOFTOP_PV_ACTUAL` table for SA — validated in notebook
+- [x] Explore raw data in a notebook — confirmed shapes and column names
+- [x] Build `src/data_loader.py` — NEMOSIS interface returning custom domain types
+- [x] Build `src/models/` — typed dataclass layer (PriceSeries, ScadaSeries, RooftopPVSeries)
 
-**Deliverable:** `data_loader.py` that can be imported by any analysis module.
+**Deliverable:** `data_loader.py` + `src/models/` importable by any analysis module.
 
 **Key decisions made:**
-- Cache format: Parquet (faster reads than CSV, smaller than feather)
+- No second cache layer on top of NEMOSIS — NEMOSIS caches natively; revisit if reads are slow
+- `data_loader.py` is the only file that imports pandas — everything else uses custom types
+- Iterate over DataFrame columns with `zip`, not `itertuples` (Pylance types itertuples as Never)
 - Start region: SA only
-- Date range for dev/testing: 2022–2024 (captures post-5-minute-settlement change)
+- Date range for dev/testing: 2023–2024 (post-5-minute-settlement, manageable size)
 
 ---
 
 ### Phase 2 — Core Analysis (Week 2–4) [ ]
 
-**Goal:** Build three self-contained analysis modules. Each should accept a clean
-DataFrame from `data_loader.py` and return a Plotly figure + a plain-English insight string.
+**Goal:** Build three self-contained analysis modules. Each should accept custom
+domain types from `data_loader.py` and return an `AnalysisResult(figure, insight, data)`.
 
 #### Analysis 1 — Negative Price Frequency (`src/analysis/negative_prices.py`) [ ]
 - Calculate frequency of negative dispatch prices per month/quarter
@@ -121,18 +129,15 @@ All logic lives in `src/`.
 
 ### Phase 4 — Polish & Publish (Week 6–8) [ ]
 
-#### README [ ]
-Write it like a blog post, not documentation:
-- Lead with the problem ("DER is changing NEM price dynamics...")
-- Explain what you built and the three analyses
-- Include screenshots of each chart
-- Link to the live Streamlit app
-- Credit NEMOSIS/UNSW-CEEM for the data tooling
+#### README [x]
+Written as a blog post — leads with the problem, explains the three analyses,
+has placeholder slots for screenshots. Update numbers and swap in real screenshots
+once the app is running.
 
 #### Deploy to Streamlit Cloud [ ]
 - Free tier at streamlit.io/cloud
 - Connect GitHub repo, set entry point to `app.py`
-- Add a `requirements.txt` with pinned versions
+- Streamlit Cloud uses `requirements.txt` (not pyproject.toml) — keep both in sync
 
 #### LinkedIn Post [ ]
 - Announce the project with 2–3 of the most striking charts
@@ -150,7 +155,7 @@ Write it like a blog post, not documentation:
 
 | Week | Focus                                  | Status |
 |------|----------------------------------------|--------|
-| 1    | NEMOSIS setup + data exploration       | [ ]    |
+| 1    | NEMOSIS setup + data exploration       | [x]    |
 | 2    | Data pipeline + Analysis 1             | [ ]    |
 | 3    | Analysis 2                             | [ ]    |
 | 4    | Analysis 3                             | [ ]    |
@@ -167,7 +172,12 @@ _Update this as you make architectural or scope decisions during the build._
 
 | Date | Decision | Reason |
 |------|----------|--------|
-|      |          |        |
+| 2026-03-15 | Custom dataclass layer (`src/models/`) instead of passing DataFrames | Clean typed interface; pandas stays isolated to data_loader.py |
+| 2026-03-15 | Use `zip` over columns instead of `itertuples` for DataFrame conversion | `itertuples` types as `Never` in Pylance, causing false errors |
+| 2026-03-15 | uv + pyproject.toml for dependency management | Faster installs, cleaner lockfile; keep requirements.txt for Streamlit Cloud |
+| 2026-03-15 | No second Parquet cache on top of NEMOSIS | NEMOSIS caches natively (feather); premature optimisation |
+| 2026-03-15 | Dev date range 2023–2024 (not 2022–2024) | One year is sufficient; smaller and faster to work with |
+| 2026-03-15 | `AnalysisResult(figure, insight, data)` as shared return type | Uniform interface from analysis modules to Streamlit |
 
 ---
 

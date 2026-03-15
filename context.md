@@ -83,11 +83,12 @@ in AEMO data.
 
 **Key tables used in this project:**
 
-| Table | Description | Key columns |
-|-------|-------------|-------------|
-| `DISPATCHPRICE` | Spot price per region per 5-min interval | `SETTLEMENTDATE`, `REGIONID`, `RRP` |
-| `DISPATCH_UNIT_SCADA` | Actual output of each registered generator | `SETTLEMENTDATE`, `DUID`, `SCADAVALUE` |
-| `DUDETAILSUMMARY` | Static info about each generator (fuel type, region) | `DUID`, `DISPATCHTYPE`, `REGIONID`, `STARTDATE`, `LASTCHANGED` |
+| Table | Description | Key columns | Notes |
+|-------|-------------|-------------|-------|
+| `DISPATCHPRICE` | Spot price per region per 5-min interval | `SETTLEMENTDATE`, `REGIONID`, `RRP` | |
+| `DISPATCH_UNIT_SCADA` | Actual output of each registered generator | `SETTLEMENTDATE`, `DUID`, `SCADAVALUE` | No `REGIONID` — join with `DUDETAILSUMMARY` to filter by region |
+| `DUDETAILSUMMARY` | Static generator metadata | `DUID`, `DISPATCHTYPE`, `REGIONID`, `STARTDATE`, `LASTCHANGED` | Use `nemosis.static_table()` not `dynamic_data_compiler` |
+| `ROOFTOP_PV_ACTUAL` | AEMO's estimated rooftop PV generation | `INTERVAL_DATETIME`, `REGIONID`, `POWER`, `TYPE` | Timestamp column is `INTERVAL_DATETIME` (not `SETTLEMENTDATE`). Filter `TYPE == 'MEASUREMENT'` to exclude satellite estimates |
 
 **Date format for NEMOSIS:** `'YYYY/MM/DD HH:MM:SS'`
 
@@ -163,7 +164,10 @@ show higher apparent volatility. Either:
 - All timestamps in NEM data are **Australian Eastern Standard Time (AEST, UTC+10)**,
   non-daylight-saving. Do not convert to local time — keep everything in AEST.
 - `SETTLEMENTDATE` in dispatch tables refers to the **end** of the dispatch interval,
-  not the start.
+  not the start. `ROOFTOP_PV_ACTUAL` uses `INTERVAL_DATETIME` instead of `SETTLEMENTDATE`.
 - Region IDs in data always include the trailing `1`: `NSW1`, `VIC1`, `QLD1`, `SA1`, `TAS1`
 - NEMOSIS `dynamic_data_compiler` requires start/end times as strings in the format
   `'YYYY/MM/DD HH:MM:SS'`
+- `data_loader.py` is the only file that imports pandas. It converts NEMOSIS DataFrames
+  to custom domain types immediately using `zip` over columns (not `itertuples` — Pylance
+  types itertuples return as `Never`, causing false errors throughout the codebase).
